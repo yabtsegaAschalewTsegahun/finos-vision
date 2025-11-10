@@ -13,13 +13,17 @@ export default function SignUp() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [errors, setErrors] = useState<{ 
-    name?: string; 
-    email?: string; 
+    name?: string;
+    username?: string;
+    email?: string;
+    phone?: string;
     password?: string; 
     confirmPassword?: string;
   }>({});
@@ -32,19 +36,29 @@ export default function SignUp() {
     } else if (name.length < 2) {
       newErrors.name = 'Name must be at least 2 characters';
     }
+
+    if (!username) {
+      newErrors.username = 'Username is required';
+    } else if (username.length < 3) {
+      newErrors.username = 'Username must be at least 3 characters';
+    }
     
     if (!email) {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(email)) {
       newErrors.email = 'Invalid email format';
     }
+
+    if (!phone) {
+      newErrors.phone = 'Phone number is required';
+    } else if (phone.length < 10) {
+      newErrors.phone = 'Phone number must be at least 10 digits';
+    }
     
     if (!password) {
       newErrors.password = 'Password is required';
-    } else if (password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)) {
-      newErrors.password = 'Password must contain uppercase, lowercase, and number';
+    } else if (password.length < 4) {
+      newErrors.password = 'Password must be at least 4 characters';
     }
     
     if (!confirmPassword) {
@@ -63,17 +77,23 @@ export default function SignUp() {
     if (!validateForm()) return;
     
     try {
-      await signup(email, password, name);
+      await signup({
+        email,
+        password,
+        name,
+        username,
+        phone_number: phone,
+      });
       setShowSuccess(true);
       toast({
         title: 'Account created!',
         description: 'Please check your email to activate your account.',
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         variant: 'destructive',
         title: 'Sign up failed',
-        description: 'An error occurred. Please try again.',
+        description: error.message || 'An error occurred. Please try again.',
       });
     }
   };
@@ -144,6 +164,24 @@ export default function SignUp() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                placeholder="john_doe"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className={errors.username ? 'border-destructive' : ''}
+              />
+              {errors.username && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.username}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
@@ -157,6 +195,24 @@ export default function SignUp() {
                 <p className="text-sm text-destructive flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
                   {errors.email}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="0906255513"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className={errors.phone ? 'border-destructive' : ''}
+              />
+              {errors.phone && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.phone}
                 </p>
               )}
             </div>

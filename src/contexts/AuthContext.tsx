@@ -1,16 +1,24 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { authApi } from '@/services/api';
 
 interface User {
   id: string;
   email: string;
   name: string;
+  username: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, name: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
+  signup: (data: {
+    email: string;
+    password: string;
+    name: string;
+    username: string;
+    phone_number: string;
+  }) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -39,38 +47,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (username: string, password: string) => {
     setIsLoading(true);
     try {
-      // Mock login - in production, this would be an API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await authApi.login(username, password);
+      const { access, refresh } = response.data;
       
-      const mockUser = {
+      // Store tokens
+      localStorage.setItem('access_token', access);
+      localStorage.setItem('refresh_token', refresh);
+      
+      // Create user object
+      const user = {
         id: '1',
-        email,
-        name: email.split('@')[0],
+        email: username,
+        name: username,
+        username,
       };
       
-      setUser(mockUser);
-      localStorage.setItem('user', JSON.stringify(mockUser));
+      setUser(user);
+      localStorage.setItem('user', JSON.stringify(user));
       navigate('/dashboard');
-    } catch (error) {
-      throw new Error('Invalid credentials');
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.detail || 'Invalid credentials';
+      throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const signup = async (email: string, password: string, name: string) => {
+  const signup = async (data: {
+    email: string;
+    password: string;
+    name: string;
+    username: string;
+    phone_number: string;
+  }) => {
     setIsLoading(true);
     try {
-      // Mock signup - in production, this would be an API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const [firstName, ...lastNameParts] = data.name.split(' ');
+      const lastName = lastNameParts.join(' ') || firstName;
+      
+      await authApi.signup({
+        email: data.email,
+        first_name: firstName,
+        last_name: lastName,
+        password: data.password,
+        username: data.username,
+        phone_number: data.phone_number,
+      });
       
       // Don't auto-login after signup, show activation message
       return;
-    } catch (error) {
-      throw new Error('Signup failed');
+    } catch (error: any) {
+      const errorData = error.response?.data;
+      let errorMessage = 'Signup failed';
+      
+      if (errorData) {
+        if (errorData.username) {
+          errorMessage = errorData.username[0];
+        } else if (errorData.email) {
+          errorMessage = errorData.email[0];
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      }
+      
+      throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -79,6 +122,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
     navigate('/login');
   };
 

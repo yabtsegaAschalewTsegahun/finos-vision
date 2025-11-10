@@ -11,27 +11,23 @@ import { useToast } from '@/hooks/use-toast';
 export default function Login() {
   const { user, login, isLoading } = useAuth();
   const { toast } = useToast();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ username?: string; password?: string }>({});
 
   if (user) {
     return <Navigate to="/dashboard" replace />;
   }
 
   const validateForm = () => {
-    const newErrors: { email?: string; password?: string } = {};
+    const newErrors: { username?: string; password?: string } = {};
     
-    if (!email) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Invalid email format';
+    if (!username) {
+      newErrors.username = 'Username is required';
     }
     
     if (!password) {
       newErrors.password = 'Password is required';
-    } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
     }
     
     setErrors(newErrors);
@@ -44,16 +40,16 @@ export default function Login() {
     if (!validateForm()) return;
     
     try {
-      await login(email, password);
+      await login(username, password);
       toast({
         title: 'Welcome back!',
         description: 'You have successfully logged in.',
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         variant: 'destructive',
         title: 'Login failed',
-        description: 'Invalid email or password. Please try again.',
+        description: error.message || 'Invalid username or password. Please try again.',
       });
     }
   };
@@ -73,19 +69,19 @@ export default function Login() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={errors.email ? 'border-destructive' : ''}
+                id="username"
+                type="text"
+                placeholder="your_username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className={errors.username ? 'border-destructive' : ''}
               />
-              {errors.email && (
+              {errors.username && (
                 <p className="text-sm text-destructive flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
-                  {errors.email}
+                  {errors.username}
                 </p>
               )}
             </div>
