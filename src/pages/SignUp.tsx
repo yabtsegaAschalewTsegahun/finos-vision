@@ -12,7 +12,8 @@ export default function SignUp() {
   const { signup, isLoading } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -20,7 +21,8 @@ export default function SignUp() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [errors, setErrors] = useState<{ 
-    name?: string;
+    firstName?: string;
+    lastName?: string;
     username?: string;
     email?: string;
     phone?: string;
@@ -31,28 +33,44 @@ export default function SignUp() {
   const validateForm = () => {
     const newErrors: typeof errors = {};
     
-    if (!name) {
-      newErrors.name = 'Name is required';
-    } else if (name.length < 2) {
-      newErrors.name = 'Name must be at least 2 characters';
+    if (!firstName) {
+      newErrors.firstName = 'First name is required';
+    } else if (firstName.trim().length < 2) {
+      newErrors.firstName = 'First name must be at least 2 characters';
+    } else if (firstName.trim().length > 100) {
+      newErrors.firstName = 'First name must be less than 100 characters';
+    }
+
+    if (!lastName) {
+      newErrors.lastName = 'Last name is required';
+    } else if (lastName.trim().length < 2) {
+      newErrors.lastName = 'Last name must be at least 2 characters';
+    } else if (lastName.trim().length > 100) {
+      newErrors.lastName = 'Last name must be less than 100 characters';
     }
 
     if (!username) {
       newErrors.username = 'Username is required';
-    } else if (username.length < 3) {
+    } else if (username.trim().length < 3) {
       newErrors.username = 'Username must be at least 3 characters';
+    } else if (username.trim().length > 50) {
+      newErrors.username = 'Username must be less than 50 characters';
     }
     
     if (!email) {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(email)) {
       newErrors.email = 'Invalid email format';
+    } else if (email.trim().length > 255) {
+      newErrors.email = 'Email must be less than 255 characters';
     }
 
     if (!phone) {
       newErrors.phone = 'Phone number is required';
-    } else if (phone.length < 10) {
+    } else if (phone.trim().length < 10) {
       newErrors.phone = 'Phone number must be at least 10 digits';
+    } else if (phone.trim().length > 20) {
+      newErrors.phone = 'Phone number must be less than 20 characters';
     }
     
     if (!password) {
@@ -78,11 +96,12 @@ export default function SignUp() {
     
     try {
       await signup({
-        email,
+        email: email.trim(),
         password,
-        name,
-        username,
-        phone_number: phone,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        username: username.trim(),
+        phone_number: phone.trim(),
       });
       setShowSuccess(true);
       toast({
@@ -146,19 +165,39 @@ export default function SignUp() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="firstName">First Name</Label>
               <Input
-                id="name"
+                id="firstName"
                 type="text"
-                placeholder="John Doe"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className={errors.name ? 'border-destructive' : ''}
+                placeholder="John"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className={errors.firstName ? 'border-destructive' : ''}
+                maxLength={100}
               />
-              {errors.name && (
+              {errors.firstName && (
                 <p className="text-sm text-destructive flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
-                  {errors.name}
+                  {errors.firstName}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lastName">Last Name</Label>
+              <Input
+                id="lastName"
+                type="text"
+                placeholder="Doe"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className={errors.lastName ? 'border-destructive' : ''}
+                maxLength={100}
+              />
+              {errors.lastName && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.lastName}
                 </p>
               )}
             </div>
@@ -172,6 +211,7 @@ export default function SignUp() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className={errors.username ? 'border-destructive' : ''}
+                maxLength={50}
               />
               {errors.username && (
                 <p className="text-sm text-destructive flex items-center gap-1">
@@ -190,6 +230,7 @@ export default function SignUp() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className={errors.email ? 'border-destructive' : ''}
+                maxLength={255}
               />
               {errors.email && (
                 <p className="text-sm text-destructive flex items-center gap-1">
@@ -208,6 +249,7 @@ export default function SignUp() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className={errors.phone ? 'border-destructive' : ''}
+                maxLength={20}
               />
               {errors.phone && (
                 <p className="text-sm text-destructive flex items-center gap-1">

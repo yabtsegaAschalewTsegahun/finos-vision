@@ -15,7 +15,8 @@ interface AuthContextType {
   signup: (data: {
     email: string;
     password: string;
-    name: string;
+    first_name: string;
+    last_name: string;
     username: string;
     phone_number: string;
   }) => Promise<void>;
@@ -79,23 +80,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signup = async (data: {
     email: string;
     password: string;
-    name: string;
+    first_name: string;
+    last_name: string;
     username: string;
     phone_number: string;
   }) => {
     setIsLoading(true);
     try {
-      const [firstName, ...lastNameParts] = data.name.split(' ');
-      const lastName = lastNameParts.join(' ') || firstName;
-      
-      await authApi.signup({
-        email: data.email,
-        first_name: firstName,
-        last_name: lastName,
-        password: data.password,
-        username: data.username,
-        phone_number: data.phone_number,
-      });
+      await authApi.signup(data);
       
       // Don't auto-login after signup, show activation message
       return;
