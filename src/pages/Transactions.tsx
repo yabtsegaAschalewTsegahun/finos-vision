@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { useFinanceStore } from '@/stores/financeStore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -9,16 +9,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, TrendingUp, TrendingDown, Search, Download, Filter, Trash2 } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Search, Download, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { transactionApi, categoriesApi } from '../services/api';
 
 export default function Transactions() {
-  const { transactions, budgets, addTransaction, deleteTransaction } = useFinanceStore();
+  const { transactions, addTransaction, deleteTransaction } = useFinanceStore();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [categories, setCategories] = useState<{ id: number; name: string; type: string }[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     amount: '',
@@ -29,69 +32,107 @@ export default function Transactions() {
     paymentMethod: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Fetch categories dynamically
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await categoriesApi.getCategories();
+        setCategories(response.data);
+      } catch (error) {
+        console.error('Failed to fetch categories:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Error Loading Categories',
+          description: 'Could not fetch categories from the server.',
+        });
+      }
+    };
+    fetchCategories();
+  }, [toast]);
+
+  // Submit new transaction
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.amount || !formData.description || !formData.category) {
       toast({
         variant: 'destructive',
         title: 'Validation Error',
-        description: 'Please fill in all required fields',
+        description: 'Please fill in all required fields.',
       });
       return;
     }
 
-    addTransaction({
-      amount: parseFloat(formData.amount),
-      description: formData.description,
-      date: formData.date,
-      category: formData.category,
-      type: formData.type,
-      paymentMethod: formData.paymentMethod,
-    });
+    setIsSubmitting(true);
 
-    toast({
-      title: 'Transaction Added',
-      description: `${formData.description} has been recorded`,
-    });
+    try {
+      const payload = {
+        category: Number(formData.category),
+        amount: parseFloat(formData.amount),
+        description: formData.description,
+        tx_ref: `tx-${Date.now()}`,
+        status: 'completed',
+      };
 
-    setFormData({
-      amount: '',
-      description: '',
-      date: new Date().toISOString().split('T')[0],
-      category: '',
-      type: 'expense',
-      paymentMethod: '',
-    });
-    setIsDialogOpen(false);
+      const response = await transactionApi.createTransaction(payload);
+
+      addTransaction({
+        id: response.data.id,
+        amount: response.data.amount,
+        description: response.data.description,
+        date: response.data.created_at || formData.date,
+        category: response.data.category_name || categories.find(c => c.id === Number(formData.category))?.name || 'Unknown',
+        type: categories.find(c => c.id === Number(formData.category))?.type || formData.type,
+        paymentMethod: formData.paymentMethod,
+      });
+
+      toast({
+        title: 'Transaction Added',
+        description: `${formData.description} has been recorded successfully.`,
+      });
+
+      setFormData({
+        amount: '',
+        description: '',
+        date: new Date().toISOString().split('T')[0],
+        category: '',
+        type: 'expense',
+        paymentMethod: '',
+      });
+      setIsDialogOpen(false);
+    } catch (error: any) {
+      console.error('Transaction creation failed:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Transaction Failed',
+        description: error.response?.data?.detail || 'Something went wrong while creating the transaction.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDelete = (id: string, description: string) => {
     deleteTransaction(id);
     toast({
       title: 'Transaction Deleted',
-      description: `${description} has been removed`,
+      description: `${description} has been removed.`,
     });
   };
 
   const filteredTransactions = transactions
     .filter(t => filterType === 'all' || t.type === filterType)
     .filter(t => filterCategory === 'all' || t.category === filterCategory)
-    .filter(t => 
+    .filter(t =>
       t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       t.category.toLowerCase().includes(searchTerm.toLowerCase())
     )
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const categories = ['all', ...new Set(budgets.map(b => b.category))];
+  const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+  const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
 
-  const totalIncome = transactions
-    .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
-  
-  const totalExpenses = transactions
-    .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
+  const uniqueCategories = ['all', ...new Set(categories.map(c => c.name))];
 
   return (
     <Layout>
@@ -102,7 +143,7 @@ export default function Transactions() {
             <h1 className="text-3xl font-bold text-foreground">Transactions</h1>
             <p className="text-muted-foreground mt-1">View and manage all your financial transactions</p>
           </div>
-          
+
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button size="lg" className="gap-2">
@@ -115,8 +156,9 @@ export default function Transactions() {
                 <DialogTitle>Add New Transaction</DialogTitle>
                 <DialogDescription>Record a new income or expense transaction</DialogDescription>
               </DialogHeader>
-              
+
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Type */}
                 <div className="space-y-2">
                   <Label htmlFor="type">Type *</Label>
                   <Select
@@ -124,7 +166,7 @@ export default function Transactions() {
                     onValueChange={(value: 'income' | 'expense') => setFormData({ ...formData, type: value })}
                   >
                     <SelectTrigger id="type">
-                      <SelectValue />
+                      <SelectValue placeholder="Select type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="income">Income</SelectItem>
@@ -133,6 +175,7 @@ export default function Transactions() {
                   </Select>
                 </div>
 
+                {/* Amount */}
                 <div className="space-y-2">
                   <Label htmlFor="amount">Amount ($) *</Label>
                   <Input
@@ -147,6 +190,7 @@ export default function Transactions() {
                   />
                 </div>
 
+                {/* Description */}
                 <div className="space-y-2">
                   <Label htmlFor="description">Description *</Label>
                   <Input
@@ -158,6 +202,7 @@ export default function Transactions() {
                   />
                 </div>
 
+                {/* Category */}
                 <div className="space-y-2">
                   <Label htmlFor="category">Category *</Label>
                   <Select
@@ -168,29 +213,18 @@ export default function Transactions() {
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      {formData.type === 'income' ? (
-                        <>
-                          <SelectItem value="Income">Salary</SelectItem>
-                          <SelectItem value="Freelance">Freelance</SelectItem>
-                          <SelectItem value="Investment">Investment</SelectItem>
-                          <SelectItem value="Other">Other Income</SelectItem>
-                        </>
-                      ) : (
-                        <>
-                          <SelectItem value="Housing">Housing</SelectItem>
-                          <SelectItem value="Food">Food</SelectItem>
-                          <SelectItem value="Transport">Transportation</SelectItem>
-                          <SelectItem value="Entertainment">Entertainment</SelectItem>
-                          <SelectItem value="Utilities">Utilities</SelectItem>
-                          <SelectItem value="Healthcare">Healthcare</SelectItem>
-                          <SelectItem value="Shopping">Shopping</SelectItem>
-                          <SelectItem value="Other">Other</SelectItem>
-                        </>
-                      )}
+                      {categories
+                        .filter(c => c.type === formData.type)
+                        .map(cat => (
+                          <SelectItem key={cat.id} value={String(cat.id)}>
+                            {cat.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
 
+                {/* Payment Method */}
                 <div className="space-y-2">
                   <Label htmlFor="paymentMethod">Payment Method</Label>
                   <Select
@@ -211,6 +245,7 @@ export default function Transactions() {
                   </Select>
                 </div>
 
+                {/* Date */}
                 <div className="space-y-2">
                   <Label htmlFor="date">Date</Label>
                   <Input
@@ -221,12 +256,13 @@ export default function Transactions() {
                   />
                 </div>
 
+                {/* Buttons */}
                 <div className="flex gap-3 pt-4">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
                     Cancel
                   </Button>
-                  <Button type="submit" className="flex-1">
-                    Add Transaction
+                  <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                    {isSubmitting ? 'Adding...' : 'Add Transaction'}
                   </Button>
                 </div>
               </form>
@@ -237,46 +273,38 @@ export default function Transactions() {
         {/* Summary Cards */}
         <div className="grid gap-4 md:grid-cols-3">
           <Card className="shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Income</CardTitle>
               <TrendingUp className="h-4 w-4 text-success" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-success">${totalIncome.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {transactions.filter(t => t.type === 'income').length} transactions
-              </p>
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
               <TrendingDown className="h-4 w-4 text-destructive" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-destructive">${totalExpenses.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {transactions.filter(t => t.type === 'expense').length} transactions
-              </p>
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Net Balance</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${totalIncome - totalExpenses >= 0 ? 'text-success' : 'text-destructive'}`}>
                 ${(totalIncome - totalExpenses).toFixed(2)}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Current period</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Filters and Table */}
+        {/* Filters & Table */}
         <Card className="shadow-md">
           <CardHeader>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -302,7 +330,7 @@ export default function Transactions() {
               </div>
               <Select value={filterType} onValueChange={(value: any) => setFilterType(value)}>
                 <SelectTrigger className="w-full sm:w-[150px]">
-                  <SelectValue />
+                  <SelectValue placeholder="All Types" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
@@ -312,10 +340,10 @@ export default function Transactions() {
               </Select>
               <Select value={filterCategory} onValueChange={setFilterCategory}>
                 <SelectTrigger className="w-full sm:w-[150px]">
-                  <SelectValue />
+                  <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat => (
+                  {uniqueCategories.map(cat => (
                     <SelectItem key={cat} value={cat}>
                       {cat === 'all' ? 'All Categories' : cat}
                     </SelectItem>
@@ -324,6 +352,7 @@ export default function Transactions() {
               </Select>
             </div>
           </CardHeader>
+
           <CardContent>
             <div className="rounded-md border">
               <Table>
@@ -335,7 +364,7 @@ export default function Transactions() {
                     <TableHead>Method</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
+                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -348,9 +377,7 @@ export default function Transactions() {
                   ) : (
                     filteredTransactions.map((transaction) => (
                       <TableRow key={transaction.id}>
-                        <TableCell className="font-medium">
-                          {new Date(transaction.date).toLocaleDateString()}
-                        </TableCell>
+                        <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
                         <TableCell>{transaction.description}</TableCell>
                         <TableCell>{transaction.category}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">
@@ -361,9 +388,11 @@ export default function Transactions() {
                             {transaction.type}
                           </Badge>
                         </TableCell>
-                        <TableCell className={`text-right font-semibold ${
-                          transaction.type === 'income' ? 'text-success' : 'text-destructive'
-                        }`}>
+                        <TableCell
+                          className={`text-right font-semibold ${
+                            transaction.type === 'income' ? 'text-success' : 'text-destructive'
+                          }`}
+                        >
                           {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toFixed(2)}
                         </TableCell>
                         <TableCell>

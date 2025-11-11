@@ -1,87 +1,176 @@
+// src/stores/financeStore.ts
 import { create } from 'zustand';
+import { budgetApi, transactionApi, categoriesApi } from '@/services/api'; // Import your APIs
 
-export interface Budget {
-  id: string;
-  name: string;
-  category: string;
-  limit: number;
-  spent: number;
-  period: 'monthly' | 'weekly';
-  startDate: string;
+// Define types for your data
+interface Budget {
+  id: number;
+  user: string;
+  category: number; // Storing category ID here
+  amount: number; // This is the budget limit
+  spent: number; // You'll need to calculate this or have it from the backend
+  month: string;
+  due_date: string | null;
+  transaction: number | null;
 }
 
-export interface Transaction {
-  id: string;
+interface Transaction {
+  id: number;
+  user: string;
+  category: number; // Storing category ID here
   amount: number;
   description: string;
+  tx_ref: string;
+  status: string;
   date: string;
-  category: string;
-  type: 'income' | 'expense';
-  paymentMethod: string;
+  created_at: string;
+  type: 'income' | 'expense'; // You might need to derive this from category type
 }
 
-interface FinanceStore {
+interface Category {
+  id: number;
+  name: string;
+  type: 'income' | 'expense';
+  priority: string | null;
+}
+
+interface FinanceState {
   budgets: Budget[];
   transactions: Transaction[];
-  addBudget: (budget: Omit<Budget, 'id' | 'spent'>) => void;
-  updateBudget: (id: string, budget: Partial<Budget>) => void;
-  deleteBudget: (id: string) => void;
-  addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
-  updateTransaction: (id: string, transaction: Partial<Transaction>) => void;
-  deleteTransaction: (id: string) => void;
+  categories: Category[];
+  loading: boolean;
+  error: string | null;
+  fetchInitialData: () => Promise<void>;
+  fetchBudgets: () => Promise<void>;
+  fetchTransactions: () => Promise<void>;
+  fetchCategories: () => Promise<void>;
+  // Add actions for adding new data, which would also trigger a refresh
+  addTransaction: (data: Parameters<typeof transactionApi.createTransaction>[0]) => Promise<void>;
+  createBudget: (data: Parameters<typeof budgetApi.createBudget>[0]) => Promise<void>;
 }
 
-// Mock data
-const mockBudgets: Budget[] = [
-  { id: '1', name: 'Rent', category: 'Housing', limit: 1500, spent: 1500, period: 'monthly', startDate: '2025-11-01' },
-  { id: '2', name: 'Groceries', category: 'Food', limit: 600, spent: 423, period: 'monthly', startDate: '2025-11-01' },
-  { id: '3', name: 'Entertainment', category: 'Entertainment', limit: 200, spent: 156, period: 'monthly', startDate: '2025-11-01' },
-  { id: '4', name: 'Transportation', category: 'Transport', limit: 300, spent: 187, period: 'monthly', startDate: '2025-11-01' },
-  { id: '5', name: 'Utilities', category: 'Housing', limit: 200, spent: 145, period: 'monthly', startDate: '2025-11-01' },
-];
+export const useFinanceStore = create<FinanceState>((set, get) => ({
+  budgets: [],
+  transactions: [],
+  categories: [],
+  loading: false,
+  error: null,
 
-const mockTransactions: Transaction[] = [
-  { id: '1', amount: 1500, description: 'Monthly Rent', date: '2025-11-01', category: 'Housing', type: 'expense', paymentMethod: 'Bank Transfer' },
-  { id: '2', amount: 3500, description: 'Salary', date: '2025-11-01', category: 'Income', type: 'income', paymentMethod: 'Direct Deposit' },
-  { id: '3', amount: 125, description: 'Grocery Shopping', date: '2025-11-02', category: 'Food', type: 'expense', paymentMethod: 'Credit Card' },
-  { id: '4', amount: 45, description: 'Gas Station', date: '2025-11-02', category: 'Transport', type: 'expense', paymentMethod: 'Debit Card' },
-  { id: '5', amount: 89, description: 'Restaurant Dinner', date: '2025-11-03', category: 'Entertainment', type: 'expense', paymentMethod: 'Credit Card' },
-  { id: '6', amount: 145, description: 'Electric Bill', date: '2025-11-03', category: 'Housing', type: 'expense', paymentMethod: 'Auto-pay' },
-  { id: '7', amount: 67, description: 'Movie Tickets', date: '2025-11-04', category: 'Entertainment', type: 'expense', paymentMethod: 'Credit Card' },
-  { id: '8', amount: 198, description: 'Grocery Shopping', date: '2025-11-05', category: 'Food', type: 'expense', paymentMethod: 'Debit Card' },
-];
+  // Fetches all necessary data at once (e.g., on app load)
+  fetchInitialData: async () => {
+    set({ loading: true, error: null });
+    try {
+      await Promise.all([get().fetchBudgets(), get().fetchTransactions(), get().fetchCategories()]);
+      set({ loading: false });
+    } catch (error: any) {
+      set({ loading: false, error: error.message || 'Failed to fetch initial data' });
+    }
+  },
 
-export const useFinanceStore = create<FinanceStore>((set) => ({
-  budgets: mockBudgets,
-  transactions: mockTransactions,
-  
-  addBudget: (budget) =>
-    set((state) => ({
-      budgets: [...state.budgets, { ...budget, id: Date.now().toString(), spent: 0 }],
-    })),
-  
-  updateBudget: (id, budget) =>
-    set((state) => ({
-      budgets: state.budgets.map((b) => (b.id === id ? { ...b, ...budget } : b)),
-    })),
-  
-  deleteBudget: (id) =>
-    set((state) => ({
-      budgets: state.budgets.filter((b) => b.id !== id),
-    })),
-  
-  addTransaction: (transaction) =>
-    set((state) => ({
-      transactions: [...state.transactions, { ...transaction, id: Date.now().toString() }],
-    })),
-  
-  updateTransaction: (id, transaction) =>
-    set((state) => ({
-      transactions: state.transactions.map((t) => (t.id === id ? { ...t, ...transaction } : t)),
-    })),
-  
-  deleteTransaction: (id) =>
-    set((state) => ({
-      transactions: state.transactions.filter((t) => t.id !== id),
-    })),
+  fetchBudgets: async () => {
+    set({ loading: true, error: null });
+    try {
+      const response = await budgetApi.getBudgets();
+      // Transform backend response to match Budget interface and calculate 'spent'
+      // You might need a more sophisticated way to calculate 'spent' based on transactions
+      // associated with each budget category. For now, let's mock it or assume backend provides it.
+      const fetchedBudgets: Budget[] = response.data.map((b: any) => ({
+        id: b.id,
+        user: b.user,
+        category: b.category,
+        amount: parseFloat(b.amount), // 'amount' from backend is the budget limit
+        spent: 0, // Placeholder: This needs to be calculated dynamically from transactions in a real app
+        month: b.month,
+        due_date: b.due_date,
+        transaction: b.transaction,
+        name: get().categories.find(c => c.id === b.category)?.name || `Category ${b.category}` // Add name for display
+      }));
+
+      // A basic way to calculate spent for demonstration.
+      // In a real app, you'd likely filter transactions by month/budget period.
+      const categories = get().categories;
+      const transactions = get().transactions;
+
+      const budgetsWithSpent = fetchedBudgets.map(budget => {
+        const categoryType = categories.find(c => c.id === budget.category)?.type;
+        let spent = 0;
+        if (categoryType === 'expense') {
+          spent = transactions
+            .filter(t => t.category === budget.category && t.type === 'expense') // Assuming transaction has a 'type'
+            .reduce((sum, t) => sum + t.amount, 0);
+        }
+        return { ...budget, spent };
+      });
+
+
+      set({ budgets: budgetsWithSpent, loading: false });
+    } catch (error: any) {
+      set({ loading: false, error: error.message || 'Failed to fetch budgets' });
+    }
+  },
+
+  fetchTransactions: async () => {
+    set({ loading: true, error: null });
+    try {
+      // Assuming you have an API endpoint to get all transactions for the current user.
+      // The Postman collection doesn't explicitly show a GET for transactions,
+      // so this is a placeholder. If not available, you might need to adjust your backend.
+      // For now, let's assume `transactionApi.getTransactions()` exists.
+      // If not, you might have to filter them from a general activity feed.
+      const response = await api.get('/create-transaction/'); // Assuming this endpoint works for GET as well
+      const categories = get().categories;
+      const fetchedTransactions: Transaction[] = response.data.map((t: any) => {
+        const category = categories.find(c => c.id === t.category);
+        return {
+          id: t.id,
+          user: t.user,
+          category: t.category,
+          amount: parseFloat(t.amount),
+          description: t.description,
+          tx_ref: t.tx_ref,
+          status: t.status,
+          date: t.date,
+          created_at: t.created_at,
+          type: category ? category.type : 'expense', // Derive type from category
+        };
+      });
+      set({ transactions: fetchedTransactions, loading: false });
+    } catch (error: any) {
+      set({ loading: false, error: error.message || 'Failed to fetch transactions' });
+    }
+  },
+
+  fetchCategories: async () => {
+    set({ loading: true, error: null });
+    try {
+      const response = await categoriesApi.getCategories();
+      set({ categories: response.data, loading: false });
+    } catch (error: any) {
+      set({ loading: false, error: error.message || 'Failed to fetch categories' });
+    }
+  },
+
+  addTransaction: async (data) => {
+    set({ loading: true, error: null });
+    try {
+      await transactionApi.createTransaction(data);
+      await get().fetchTransactions(); // Refresh transactions after adding
+      set({ loading: false });
+    } catch (error: any) {
+      set({ loading: false, error: error.message || 'Failed to add transaction' });
+      throw error; // Re-throw to allow component to handle alert
+    }
+  },
+
+  createBudget: async (data) => {
+    set({ loading: true, error: null });
+    try {
+      await budgetApi.createBudget(data);
+      await get().fetchBudgets(); // Refresh budgets after creating
+      set({ loading: false });
+    } catch (error: any) {
+      set({ loading: false, error: error.message || 'Failed to create budget' });
+      throw error; // Re-throw to allow component to handle alert
+    }
+  },
 }));
