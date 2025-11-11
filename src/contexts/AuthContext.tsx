@@ -51,7 +51,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (username: string, password: string) => {
     setIsLoading(true);
     try {
+      console.log('Attempting login with username:', username);
       const response = await authApi.login(username, password);
+      console.log('Login response received:', response.data);
       const { access, refresh } = response.data;
       
       // Store tokens
@@ -70,6 +72,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('user', JSON.stringify(user));
       navigate('/dashboard');
     } catch (error: any) {
+      console.error('Login error:', error);
+      console.error('Error response:', error.response?.data);
       const errorMessage = error.response?.data?.detail || 'Invalid credentials';
       throw new Error(errorMessage);
     } finally {
@@ -87,11 +91,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }) => {
     setIsLoading(true);
     try {
-      await authApi.signup(data);
+      console.log('Attempting signup with data:', { ...data, password: '***' });
+      const response = await authApi.signup(data);
+      console.log('Signup response:', response.data);
       
       // Don't auto-login after signup, show activation message
       return;
     } catch (error: any) {
+      console.error('Signup error:', error);
+      console.error('Error response:', error.response?.data);
       const errorData = error.response?.data;
       let errorMessage = 'Signup failed';
       
