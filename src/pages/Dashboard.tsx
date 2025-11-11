@@ -13,33 +13,173 @@ import {
   Plus
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { useMemo, useEffect, useState } from 'react'; // Added useEffect and useState
-import { transactionApi, budgetApi, categoriesApi } from '@/services/api'; // Ensure all needed APIs are imported
+import { useMemo, useEffect, useState } from 'react';
+import { transactionApi, budgetApi, categoriesApi, paymentApi } from '@/services/api';
+
+// Form components
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger,
+  DialogFooter 
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function Dashboard() {
   const {
     budgets,
     transactions,
-    categories, // Access categories from the store
+    categories,
     loading,
     error,
-    fetchInitialData, // Action to fetch all initial data
-    addTransaction,   // Action to add transaction
-    createBudget      // Action to create budget
+    fetchInitialData,
+    addTransaction,
+    createBudget
   } = useFinanceStore();
 
-  const [isAddingTransaction, setIsAddingTransaction] = useState(false); // State for modal/form visibility
-  const [isCreatingBudget, setIsCreatingBudget] = useState(false); // State for modal/form visibility
+  const [isAddingTransaction, setIsAddingTransaction] = useState(false);
+  const [isCreatingBudget, setIsCreatingBudget] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
-  // Fetch initial data when the component mounts
+  // Form states
+  const [transactionForm, setTransactionForm] = useState({
+    category: '',
+    amount: '',
+    description: '',
+    tx_ref: '',
+    status: 'Success'
+  });
+
+  const [budgetForm, setBudgetForm] = useState({
+    category: '',
+    amount: ''
+  });
+
   useEffect(() => {
     fetchInitialData();
   }, [fetchInitialData]);
 
+  // Reset forms when dialogs close
+  const resetTransactionForm = () => {
+    setTransactionForm({
+      category: '',
+      amount: '',
+      description: '',
+      tx_ref: '',
+      status: 'Success'
+    });
+  };
+
+  const resetBudgetForm = () => {
+    setBudgetForm({
+      category: '',
+      amount: ''
+    });
+  };
+
+  const handleTransactionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!transactionForm.category || !transactionForm.amount || !transactionForm.description) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      await addTransaction({
+        category: parseInt(transactionForm.category),
+        amount: parseFloat(transactionForm.amount),
+        description: transactionForm.description,
+        tx_ref: transactionForm.tx_ref,
+        status: transactionForm.status
+      });
+      
+      setIsAddingTransaction(false);
+      resetTransactionForm();
+      alert('Transaction added successfully!');
+      
+      // Refresh data to show the new transaction
+      fetchInitialData();
+    } catch (err) {
+      alert('Failed to add transaction.');
+    }
+  };
+
+  const handleBudgetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!budgetForm.category || !budgetForm.amount) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      await createBudget({
+        category: parseInt(budgetForm.category),
+        amount: parseFloat(budgetForm.amount)
+      });
+      
+      setIsCreatingBudget(false);
+      resetBudgetForm();
+      alert('Budget created successfully!');
+      
+      // Refresh data to show the new budget
+      fetchInitialData();
+    } catch (err) {
+      alert('Failed to create budget.');
+    }
+  };
+
+  const handleMakePayment = async () => {
+    setIsProcessingPayment(true);
+    try {
+      const response = await paymentApi.makePayment();
+      const { checkout_url } = response.data;
+      
+      if (checkout_url) {
+        // Open the payment URL in a new tab
+        window.open(checkout_url, '_blank');
+        
+      } else {
+        alert('Network error.');
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      alert('Failed to initiate payment. Please try again.');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const handlePayBill = async (billId: string, billName: string) => {
+    setIsProcessingPayment(true);
+    try {
+      const response = await paymentApi.makePayment();
+      const { checkout_url } = response.data;
+      
+      if (checkout_url) {
+        // Open the payment URL in a new tab
+        window.open(checkout_url, '_blank');
+        alert(`Payment initiated for ${billName}! Please complete the payment in the new tab.`);
+      } else {
+        alert('Failed to get payment URL.');
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      alert('Failed to initiate payment. Please try again.');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
   // Derive financial stats dynamically from store data
   const financialStats = useMemo(() => {
-    const totalBudgetLimit = budgets.reduce((sum, b) => sum + b.amount, 0); // 'amount' is the limit
-    const totalSpent = budgets.reduce((sum, b) => sum + b.spent, 0); // 'spent' is calculated in store or backend
+    const totalBudgetLimit = budgets.reduce((sum, b) => sum + b.amount, 0);
+    const totalSpent = budgets.reduce((sum, b) => sum + b.spent, 0);
 
     const totalIncome = transactions
       .filter(t => {
@@ -68,23 +208,18 @@ export default function Dashboard() {
       totalBudgetLimit,
       totalSpent,
     };
-  }, [budgets, transactions, categories]); // Depend on categories too
+  }, [budgets, transactions, categories]);
 
-  // Prepare data for charts dynamically
   const monthlyData = useMemo(() => {
-    // This is a more complex aggregation. For a real app, you'd likely group transactions by month.
-    // For demonstration, let's keep the mock data for now or implement a basic aggregation.
-    // A robust solution would involve a helper function to group and sum.
-    // Example (simplified, assuming transactions have a 'date' field you can parse):
     const currentYear = new Date().getFullYear();
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const aggregated = months.slice(-6).map(monthName => { // Last 6 months
+    const aggregated = months.slice(-6).map(monthName => {
       const monthIndex = months.indexOf(monthName);
       let income = 0;
       let expenses = 0;
 
       transactions.forEach(t => {
-        const transactionDate = new Date(t.date); // Assuming t.date is ISO string
+        const transactionDate = new Date(t.date);
         if (transactionDate.getFullYear() === currentYear && transactionDate.getMonth() === monthIndex) {
           const category = categories.find(c => c.id === t.category);
           if (category) {
@@ -98,7 +233,7 @@ export default function Dashboard() {
       });
       return { month: monthName, income, expenses };
     });
-    // If no dynamic data, fall back to static or refine aggregation
+    
     return aggregated.length > 0 ? aggregated : [
       { month: 'May', income: 3200, expenses: 2800 },
       { month: 'Jun', income: 3400, expenses: 2900 },
@@ -126,16 +261,13 @@ export default function Dashboard() {
     return Array.from(spendingMap.entries()).map(([name, value]) => ({ name, value }));
   }, [transactions, categories]);
 
-
-  const COLORS = ['hsl(var(--primary))', 'hsl(var(--secondary))', 'hsl(var(--accent))', 'hsl(var(--destructive))', 'hsl(var(--muted))', 'hsl(var(--info))', 'hsl(var(--warning))']; // Added more colors
+  const COLORS = ['hsl(var(--primary))', 'hsl(var(--secondary))', 'hsl(var(--accent))', 'hsl(var(--destructive))', 'hsl(var(--muted))', 'hsl(var(--info))', 'hsl(var(--warning))'];
 
   const upcomingBills = useMemo(() => {
-    // Filter budgets that are near or over their limit (spent >= 80% of limit)
-    // and sort them to show the most critical ones first.
     return budgets
       .filter(b => (b.spent / b.amount) * 100 > 80)
-      .sort((a, b) => (b.spent / b.amount) - (a.spent / a.amount)) // Sort by highest percentage spent
-      .slice(0, 3) // Show top 3
+      .sort((a, b) => (b.spent / b.amount) - (a.spent / a.amount))
+      .slice(0, 3)
       .map(budget => ({
         id: budget.id,
         name: categories.find(c => c.id === budget.category)?.name || `Category ${budget.category}`,
@@ -145,42 +277,6 @@ export default function Dashboard() {
       }));
   }, [budgets, categories]);
 
-  const handleAddTransactionClick = async () => {
-    // In a real app, this would open a modal with a form
-    // For demonstration, let's use some mock data and the store action
-    const mockTransactionData = {
-      category: categories.find(c => c.name === 'Food')?.id || 4, // Example: Find Food category ID
-      amount: Math.floor(Math.random() * 100) + 10, // Random amount
-      description: 'Dynamic transaction',
-      tx_ref: `DYN-TXN-${Date.now()}`,
-      status: 'Success',
-    };
-
-    try {
-      await addTransaction(mockTransactionData);
-      alert('Transaction added successfully!');
-    } catch (err) {
-      alert('Failed to add transaction.');
-    }
-  };
-
-  const handleCreateBudgetClick = async () => {
-    // In a real app, this would open a modal with a form
-    // For demonstration, let's use some mock data and the store action
-    const mockBudgetData = {
-      category: categories.find(c => c.name === 'Entertainment')?.id || 3, // Example: Find Entertainment category ID
-      amount: Math.floor(Math.random() * 500) + 100, // Random budget limit
-    };
-
-    try {
-      await createBudget(mockBudgetData);
-      alert('Budget created successfully!');
-    } catch (err) {
-      alert('Failed to create budget.');
-    }
-  };
-
-  // Display loading or error states
   if (loading) return <Layout><div className="text-center py-10">Loading financial data...</div></Layout>;
   if (error) return <Layout><div className="text-center py-10 text-destructive">Error: {error}</div></Layout>;
 
@@ -317,7 +413,7 @@ export default function Dashboard() {
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px',
                     }}
-                    formatter={(value, name, props) => [`$${(value as number).toFixed(2)}`, name]} // Format tooltip
+                    formatter={(value, name, props) => [`$${(value as number).toFixed(2)}`, name]}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -335,7 +431,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {budgets.slice(0, 4).map((budget) => { // Displaying up to 4 budgets
+                {budgets.slice(0, 4).map((budget) => {
                   const percentage = (budget.spent / budget.amount) * 100;
                   const isOverBudget = percentage > 100;
                   const isNearLimit = percentage > 80;
@@ -375,17 +471,174 @@ export default function Dashboard() {
               <CardDescription>Manage your finances</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button className="w-full justify-start gap-2" size="lg" onClick={handleAddTransactionClick}>
-                <Plus className="h-4 w-4" />
-                Add Transaction
-              </Button>
-              <Button className="w-full justify-start gap-2" variant="secondary" size="lg" onClick={handleCreateBudgetClick}>
-                <Plus className="h-4 w-4" />
-                Create Budget
-              </Button>
-              <Button className="w-full justify-start gap-2" variant="outline" size="lg" onClick={() => paymentApi.makePayment().then(res => window.open(res.data.checkout_url, '_blank')).catch(console.error)}>
+              {/* Add Transaction Dialog */}
+              <Dialog open={isAddingTransaction} onOpenChange={(open) => {
+                setIsAddingTransaction(open);
+                if (!open) resetTransactionForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="w-full justify-start gap-2" size="lg">
+                    <Plus className="h-4 w-4" />
+                    Add Transaction
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add New Transaction</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleTransactionSubmit} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="transaction-category">Category *</Label>
+                      <Select 
+                        value={transactionForm.category} 
+                        onValueChange={(value) => setTransactionForm({...transactionForm, category: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((category) => (
+                            <SelectItem key={category.id} value={category.id.toString()}>
+                              {category.name} ({category.type})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="transaction-amount">Amount *</Label>
+                      <Input
+                        id="transaction-amount"
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={transactionForm.amount}
+                        onChange={(e) => setTransactionForm({...transactionForm, amount: e.target.value})}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="transaction-description">Description *</Label>
+                      <Input
+                        id="transaction-description"
+                        placeholder="Transaction description"
+                        value={transactionForm.description}
+                        onChange={(e) => setTransactionForm({...transactionForm, description: e.target.value})}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="transaction-reference">Transaction Reference</Label>
+                      <Input
+                        id="transaction-reference"
+                        placeholder="Optional reference"
+                        value={transactionForm.tx_ref}
+                        onChange={(e) => setTransactionForm({...transactionForm, tx_ref: e.target.value})}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="transaction-status">Status</Label>
+                      <Select 
+                        value={transactionForm.status} 
+                        onValueChange={(value) => setTransactionForm({...transactionForm, status: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Success">Success</SelectItem>
+                          <SelectItem value="Pending">Pending</SelectItem>
+                          <SelectItem value="Failed">Failed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={() => setIsAddingTransaction(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit">
+                        Add Transaction
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+
+              {/* Create Budget Dialog */}
+              <Dialog open={isCreatingBudget} onOpenChange={(open) => {
+                setIsCreatingBudget(open);
+                if (!open) resetBudgetForm();
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="w-full justify-start gap-2" variant="secondary" size="lg">
+                    <Plus className="h-4 w-4" />
+                    Create Budget
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Budget</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleBudgetSubmit} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="budget-category">Category *</Label>
+                      <Select 
+                        value={budgetForm.category} 
+                        onValueChange={(value) => setBudgetForm({...budgetForm, category: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.filter(cat => cat.type === 'expense').map((category) => (
+                            <SelectItem key={category.id} value={category.id.toString()}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="budget-amount">Budget Amount *</Label>
+                      <Input
+                        id="budget-amount"
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={budgetForm.amount}
+                        onChange={(e) => setBudgetForm({...budgetForm, amount: e.target.value})}
+                        required
+                      />
+                    </div>
+
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={() => setIsCreatingBudget(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit">
+                        Create Budget
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+
+              {/* Pay Bill Button */}
+              <Button 
+                className="w-full justify-start gap-2" 
+                variant="outline" 
+                size="lg" 
+                onClick={handleMakePayment}
+                disabled={isProcessingPayment}
+              >
                 <DollarSign className="h-4 w-4" />
-                Pay Bill
+                {isProcessingPayment ? 'Processing...' : 'Pay Bill'}
               </Button>
 
               {upcomingBills.length > 0 && (
@@ -399,8 +652,14 @@ export default function Dashboard() {
                           {bill.percentageUsed.toFixed(0)}% used
                         </span>
                       </div>
-                       <Button variant="ghost" size="sm" className="mt-1 w-full text-left justify-start">
-                        Pay Now
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="mt-1 w-full text-left justify-start"
+                        onClick={() => handlePayBill(bill.id, bill.name)}
+                        disabled={isProcessingPayment}
+                      >
+                        {isProcessingPayment ? 'Processing...' : 'Pay Now'}
                       </Button>
                     </div>
                   ))}

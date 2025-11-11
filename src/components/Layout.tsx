@@ -1,9 +1,9 @@
 import { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { LayoutDashboard, Wallet, ArrowLeftRight, LogOut, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -12,6 +12,7 @@ interface LayoutProps {
 export const Layout = ({ children }: LayoutProps) => {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navigation = [
@@ -22,8 +23,18 @@ export const Layout = ({ children }: LayoutProps) => {
 
   const isActive = (href: string) => location.pathname === href;
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" key={location.pathname}>
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-lg">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -59,7 +70,7 @@ export const Layout = ({ children }: LayoutProps) => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={logout}
+              onClick={handleLogout}
               className="hidden md:flex gap-2"
             >
               <LogOut className="h-4 w-4" />
@@ -97,7 +108,7 @@ export const Layout = ({ children }: LayoutProps) => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={logout}
+                onClick={handleLogout}
                 className="w-full justify-start gap-2"
               >
                 <LogOut className="h-4 w-4" />

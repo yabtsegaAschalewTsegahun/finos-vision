@@ -1,3 +1,4 @@
+// src/pages/Transactions.tsx
 import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { useFinanceStore } from '@/stores/financeStore';
@@ -9,19 +10,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, TrendingUp, TrendingDown, Search, Download, Trash2 } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Search, Download, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { transactionApi, categoriesApi } from '../services/api';
+import { transactionApi } from '@/services/api';
 
 export default function Transactions() {
-  const { transactions, addTransaction, deleteTransaction } = useFinanceStore();
+  const { 
+    transactions, 
+    categories, 
+    loading, 
+    error,
+    fetchInitialData,
+    addTransaction, 
+    deleteTransaction 
+  } = useFinanceStore();
+  
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
   const [filterCategory, setFilterCategory] = useState('all');
-  const [categories, setCategories] = useState<{ id: number; name: string; type: string }[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const [formData, setFormData] = useState({
     amount: '',
@@ -32,23 +45,15 @@ export default function Transactions() {
     paymentMethod: '',
   });
 
-  // Fetch categories dynamically
+  // Fetch initial data when component mounts
   useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await categoriesApi.getCategories();
-        setCategories(response.data);
-      } catch (error) {
-        console.error('Failed to fetch categories:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Error Loading Categories',
-          description: 'Could not fetch categories from the server.',
-        });
-      }
-    };
-    fetchCategories();
-  }, [toast]);
+    fetchInitialData();
+  }, [fetchInitialData]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterType, filterCategory]);
 
   // Submit new transaction
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,26 +76,17 @@ export default function Transactions() {
         amount: parseFloat(formData.amount),
         description: formData.description,
         tx_ref: `tx-${Date.now()}`,
-        status: 'completed',
+        status: 'Success',
       };
 
-      const response = await transactionApi.createTransaction(payload);
-
-      addTransaction({
-        id: response.data.id,
-        amount: response.data.amount,
-        description: response.data.description,
-        date: response.data.created_at || formData.date,
-        category: response.data.category_name || categories.find(c => c.id === Number(formData.category))?.name || 'Unknown',
-        type: categories.find(c => c.id === Number(formData.category))?.type || formData.type,
-        paymentMethod: formData.paymentMethod,
-      });
+      await addTransaction(payload);
 
       toast({
         title: 'Transaction Added',
         description: `${formData.description} has been recorded successfully.`,
       });
 
+      // Reset form
       setFormData({
         amount: '',
         description: '',
@@ -100,6 +96,9 @@ export default function Transactions() {
         paymentMethod: '',
       });
       setIsDialogOpen(false);
+      
+      // Refresh data to show the new transaction
+      fetchInitialData();
     } catch (error: any) {
       console.error('Transaction creation failed:', error);
       toast({
@@ -112,27 +111,92 @@ export default function Transactions() {
     }
   };
 
-  const handleDelete = (id: string, description: string) => {
-    deleteTransaction(id);
-    toast({
-      title: 'Transaction Deleted',
-      description: `${description} has been removed.`,
-    });
+  const handleDelete = async (id: string, description: string) => {
+    try {
+      await deleteTransaction(id);
+      toast({
+        title: 'Transaction Deleted',
+        description: `${description} has been removed.`,
+      });
+      // Refresh data after deletion
+      fetchInitialData();
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Delete Failed',
+        description: 'Failed to delete transaction.',
+      });
+    }
   };
 
+  // Filter transactions based on search and filters
   const filteredTransactions = transactions
-    .filter(t => filterType === 'all' || t.type === filterType)
-    .filter(t => filterCategory === 'all' || t.category === filterCategory)
+    .filter(t => {
+      // Type filter
+      if (filterType === 'all') return true;
+      
+      // Get category type for the transaction
+      const transactionCategory = categories.find(c => c.id === t.category);
+      return transactionCategory?.type === filterType;
+    })
+    .filter(t => {
+      // Category filter
+      if (filterCategory === 'all') return true;
+      
+      const transactionCategory = categories.find(c => c.id === t.category);
+      return transactionCategory?.name === filterCategory;
+    })
     .filter(t =>
+      // Search filter
       t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.category.toLowerCase().includes(searchTerm.toLowerCase())
+      (categories.find(c => c.id === t.category)?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
     )
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-  const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+  // Calculate totals
+  const totalIncome = transactions
+    .filter(t => {
+      const category = categories.find(c => c.id === t.category);
+      return category?.type === 'income';
+    })
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalExpenses = transactions
+    .filter(t => {
+      const category = categories.find(c => c.id === t.category);
+      return category?.type === 'expense';
+    })
+    .reduce((sum, t) => sum + t.amount, 0);
 
   const uniqueCategories = ['all', ...new Set(categories.map(c => c.name))];
+
+  // Pagination calculations
+  const totalItems = filteredTransactions.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentTransactions = filteredTransactions.slice(startIndex, endIndex);
+
+  // Pagination handlers
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const goToPrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  // Display loading or error states
+  if (loading) return <Layout><div className="text-center py-10">Loading transactions...</div></Layout>;
+  if (error) return <Layout><div className="text-center py-10 text-destructive">Error: {error}</div></Layout>;
 
   return (
     <Layout>
@@ -163,7 +227,7 @@ export default function Transactions() {
                   <Label htmlFor="type">Type *</Label>
                   <Select
                     value={formData.type}
-                    onValueChange={(value: 'income' | 'expense') => setFormData({ ...formData, type: value })}
+                    onValueChange={(value: 'income' | 'expense') => setFormData({ ...formData, type: value, category: '' })}
                   >
                     <SelectTrigger id="type">
                       <SelectValue placeholder="Select type" />
@@ -275,20 +339,20 @@ export default function Transactions() {
           <Card className="shadow-md">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Income</CardTitle>
-              <TrendingUp className="h-4 w-4 text-success" />
+              <TrendingUp className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-success">${totalIncome.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-green-500">${totalIncome.toFixed(2)}</div>
             </CardContent>
           </Card>
 
           <Card className="shadow-md">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-              <TrendingDown className="h-4 w-4 text-destructive" />
+              <TrendingDown className="h-4 w-4 text-red-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-destructive">${totalExpenses.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-red-500">${totalExpenses.toFixed(2)}</div>
             </CardContent>
           </Card>
 
@@ -297,7 +361,7 @@ export default function Transactions() {
               <CardTitle className="text-sm font-medium">Net Balance</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className={`text-2xl font-bold ${totalIncome - totalExpenses >= 0 ? 'text-success' : 'text-destructive'}`}>
+              <div className={`text-2xl font-bold ${totalIncome - totalExpenses >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                 ${(totalIncome - totalExpenses).toFixed(2)}
               </div>
             </CardContent>
@@ -310,7 +374,9 @@ export default function Transactions() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <CardTitle>Transaction History</CardTitle>
-                <CardDescription>All your financial activities</CardDescription>
+                <CardDescription>
+                  {totalItems === 0 ? 'No transactions found' : `Showing ${startIndex + 1}-${Math.min(endIndex, totalItems)} of ${totalItems} transactions`}
+                </CardDescription>
               </div>
               <Button variant="outline" size="sm" className="gap-2">
                 <Download className="h-4 w-4" />
@@ -368,49 +434,134 @@ export default function Transactions() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTransactions.length === 0 ? (
+                  {currentTransactions.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        No transactions found
+                        {transactions.length === 0 ? 'No transactions found. Add your first transaction!' : 'No transactions match your filters.'}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredTransactions.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
-                        <TableCell>{transaction.description}</TableCell>
-                        <TableCell>{transaction.category}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {transaction.paymentMethod}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={transaction.type === 'income' ? 'default' : 'secondary'}>
-                            {transaction.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell
-                          className={`text-right font-semibold ${
-                            transaction.type === 'income' ? 'text-success' : 'text-destructive'
-                          }`}
-                        >
-                          {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toFixed(2)}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(transaction.id, transaction.description)}
+                    currentTransactions.map((transaction) => {
+                      const transactionCategory = categories.find(c => c.id === transaction.category);
+                      const categoryName = transactionCategory?.name || 'Unknown';
+                      const transactionType = transactionCategory?.type || 'expense';
+                      
+                      return (
+                        <TableRow key={transaction.id}>
+                          <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
+                          <TableCell className="font-medium">{transaction.description}</TableCell>
+                          <TableCell>{categoryName}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {transaction.paymentMethod || 'Not specified'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={transactionType === 'income' ? 'default' : 'secondary'}>
+                              {transactionType}
+                            </Badge>
+                          </TableCell>
+                          <TableCell
+                            className={`text-right font-semibold ${
+                              transactionType === 'income' ? 'text-green-500' : 'text-red-500'
+                            }`}
                           >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                            {transactionType === 'income' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleDelete(transaction.id, transaction.description)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-6 border-t">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Show</span>
+                  <Select
+                    value={itemsPerPage.toString()}
+                    onValueChange={(value) => {
+                      setItemsPerPage(Number(value));
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span>per page</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToPrevPage}
+                    disabled={currentPage === 1}
+                    className="gap-1"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      // Show pages around current page
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? "default" : "outline"}
+                          size="sm"
+                          className="w-8 h-8 p-0"
+                          onClick={() => goToPage(pageNum)}
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToNextPage}
+                    disabled={currentPage === totalPages}
+                    className="gap-1"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
