@@ -111,7 +111,8 @@ export const authApi = {
 // Budget API
 // Note: From Postman, createBudget's "amount" likely maps to "limit" for the budget.
 export const budgetApi = {
-  getBudgets: () => api.get('/create-budget/'), // GET /create-budget/
+  // Note: If backend provides a separate GET endpoint for budgets, update this
+  getBudgets: () => api.get('/budgets/'), // Assuming /budgets/ endpoint exists for listing
   createBudget: (data: {
     category: number; // ID of the category
     amount: number;   // This seems to be the 'limit' for the budget based on the response
@@ -129,9 +130,10 @@ export const transactionApi = {
     status: string;      // e.g., "Success", "Failed"
   }) => api.post('/create-transaction/', data), // POST /create-transaction/
   
-  getTransactions: () => api.get('/create-transaction/'), // GET all transactions
+  // Note: If backend provides a separate GET endpoint for transactions, update this
+  getTransactions: () => api.get('/transactions/'), // Assuming /transactions/ endpoint exists for listing
   
-  deleteTransaction: (id: string) => api.delete(`/create-transaction/${id}/`), // DELETE transaction
+  deleteTransaction: (id: string) => api.delete(`/transactions/${id}/`), // DELETE transaction
 };
 
 // Payment API

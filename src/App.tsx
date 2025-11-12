@@ -11,6 +11,8 @@ import Profile from "./pages/Profile";
 import Dashboard from "./pages/Dashboard";
 import Budgets from "./pages/Budgets";
 import Transactions from "./pages/Transactions";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentFailed from "./pages/PaymentFailed";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -116,6 +118,8 @@ const App = () => (
                 </ProtectedRoute>
               } 
             />
+            <Route path="/payment-success" element={<PaymentSuccess />} />
+            <Route path="/payment-failed" element={<PaymentFailed />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

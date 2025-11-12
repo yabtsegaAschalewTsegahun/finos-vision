@@ -90,22 +90,9 @@ export default function Profile() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name" className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Name
-              </Label>
-              <Input
-                id="name"
-                value={user?.name || ''}
-                disabled
-                className="bg-muted"
-              />
-            </div>
-
-            <div className="space-y-2">
               <Label htmlFor="username" className="flex items-center gap-2">
                 <User className="h-4 w-4" />
-                Username
+                Profile Name
               </Label>
               <Input
                 id="username"
