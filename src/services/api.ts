@@ -128,6 +128,10 @@ export const transactionApi = {
     tx_ref: string;      // Transaction reference (e.g., from payment gateway)
     status: string;      // e.g., "Success", "Failed"
   }) => api.post('/create-transaction/', data), // POST /create-transaction/
+  
+  getTransactions: () => api.get('/create-transaction/'), // GET all transactions
+  
+  deleteTransaction: (id: string) => api.delete(`/create-transaction/${id}/`), // DELETE transaction
 };
 
 // Payment API

@@ -25,6 +25,7 @@ interface Transaction {
   date: string;
   created_at: string;
   type: 'income' | 'expense'; // You might need to derive this from category type
+  paymentMethod?: string; // Optional payment method field
 }
 
 interface Category {
@@ -47,6 +48,7 @@ interface FinanceState {
   // Add actions for adding new data, which would also trigger a refresh
   addTransaction: (data: Parameters<typeof transactionApi.createTransaction>[0]) => Promise<void>;
   createBudget: (data: Parameters<typeof budgetApi.createBudget>[0]) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
 }
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
@@ -117,7 +119,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       // so this is a placeholder. If not available, you might need to adjust your backend.
       // For now, let's assume `transactionApi.getTransactions()` exists.
       // If not, you might have to filter them from a general activity feed.
-      const response = await api.get('/create-transaction/'); // Assuming this endpoint works for GET as well
+      const response = await transactionApi.getTransactions(); // Assuming this endpoint works for GET as well
       const categories = get().categories;
       const fetchedTransactions: Transaction[] = response.data.map((t: any) => {
         const category = categories.find(c => c.id === t.category);
@@ -171,6 +173,18 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     } catch (error: any) {
       set({ loading: false, error: error.message || 'Failed to create budget' });
       throw error; // Re-throw to allow component to handle alert
+    }
+  },
+
+  deleteTransaction: async (id: string) => {
+    set({ loading: true, error: null });
+    try {
+      await transactionApi.deleteTransaction(id);
+      await get().fetchTransactions(); // Refresh transactions after deletion
+      set({ loading: false });
+    } catch (error: any) {
+      set({ loading: false, error: error.message || 'Failed to delete transaction' });
+      throw error;
     }
   },
 }));

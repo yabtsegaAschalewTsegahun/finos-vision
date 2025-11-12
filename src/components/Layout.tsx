@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { LayoutDashboard, Wallet, ArrowLeftRight, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Wallet, ArrowLeftRight, LogOut, Menu, X, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
 
@@ -68,6 +68,17 @@ export const Layout = ({ children }: LayoutProps) => {
               {user?.name}
             </div>
             <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="hidden md:flex gap-2"
+            >
+              <Link to="/profile">
+                <User className="h-4 w-4" />
+                Profile
+              </Link>
+            </Button>
+            <Button
               variant="ghost"
               size="sm"
               onClick={handleLogout}
@@ -105,6 +116,16 @@ export const Layout = ({ children }: LayoutProps) => {
                   </Button>
                 </Link>
               ))}
+              <Link to="/profile" onClick={() => setMobileMenuOpen(false)}>
+                <Button
+                  variant={isActive('/profile') ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                >
+                  <User className="h-4 w-4" />
+                  Profile
+                </Button>
+              </Link>
               <Button
                 variant="ghost"
                 size="sm"

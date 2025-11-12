@@ -398,7 +398,7 @@ export default function Dashboard() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={(entry) => `${entry.name}: $${entry.value.toFixed(2)}`}
+                    label={(entry: any) => `${entry.name}: $${(entry.value as number).toFixed(2)}`}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
@@ -656,7 +656,7 @@ export default function Dashboard() {
                         variant="ghost" 
                         size="sm" 
                         className="mt-1 w-full text-left justify-start"
-                        onClick={() => handlePayBill(bill.id, bill.name)}
+                        onClick={() => handlePayBill(String(bill.id), bill.name)}
                         disabled={isProcessingPayment}
                       >
                         {isProcessingPayment ? 'Processing...' : 'Pay Now'}

@@ -471,7 +471,7 @@ export default function Transactions() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => handleDelete(transaction.id, transaction.description)}
+                              onClick={() => handleDelete(String(transaction.id), transaction.description)}
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>

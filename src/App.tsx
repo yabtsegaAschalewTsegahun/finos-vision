@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
+import ForgotPassword from "./pages/ForgotPassword";
+import Profile from "./pages/Profile";
 import Dashboard from "./pages/Dashboard";
 import Budgets from "./pages/Budgets";
 import Transactions from "./pages/Transactions";
@@ -72,6 +74,22 @@ const App = () => (
                 <PublicRoute>
                   <SignUp />
                 </PublicRoute>
+              } 
+            />
+            <Route 
+              path="/forgot-password" 
+              element={
+                <PublicRoute>
+                  <ForgotPassword />
+                </PublicRoute>
+              } 
+            />
+            <Route 
+              path="/profile" 
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
               } 
             />
             <Route 
